@@ -19,8 +19,7 @@
 # =============================================================================
 
 library(glmnet)
-library(randomForest)
-library(gbm)
+
 
 
 # -----------------------------------------------------------------------------
@@ -29,62 +28,43 @@ library(gbm)
 # -----------------------------------------------------------------------------
 
 estimate_pscore <- function(D, X, method = "probit") {
-  # D      : binary treatment vector
-  # X      : covariate matrix (already includes any mediator/W if needed)
-  # method : one of "probit", "lasso", "rf", "gbm"
-  # Returns: vector of estimated Pr(D=1 | X)
-
   X <- as.matrix(X)
   
-  # Handle LASSO case with 1 column
+  # Handle edge cases
+  if (ncol(X) == 0) {
+    return(rep(mean(D), length(D)))
+  }
+  
+  # LASSO needs at least 2 columns
   if (method == "lasso" && ncol(X) < 2) {
     method <- "logit" 
   }
-
+  
   if (method == "probit") {
     df  <- data.frame(D = D, X)
     fit <- glm(D ~ ., data = df, family = binomial(link = "probit"))
     phat <- predict(fit, type = "response")
-
+    
   } else if (method == "logit") {
     df  <- data.frame(D = D, X)
     fit <- glm(D ~ ., data = df, family = binomial(link = "logit"))
     phat <- predict(fit, type = "response")
-
-  } else if (method == "lasso") {
-    # LASSO logistic regression via cross-validation
-    # Regularisation lambda chosen by 5-fold CV
-    fit  <- cv.glmnet(X, D, family = "binomial", alpha = 1,
-                      nfolds = 5, type.measure = "deviance")
-    phat <- as.vector(predict(fit, newx = X, s = "lambda.min",
-                               type = "response"))
     
-    # Inside your estimate_pscore function:
-  } else if (method == "rf") {
-    df <- data.frame(D = as.factor(D), X)
-    # Use ranger instead of randomForest
-    # num.trees=100 is usually plenty for propensity scores
-    fit <- ranger(D ~ ., data = df, num.trees = 100, 
-                  probability = TRUE, importance = 'none')
-    phat <- predictions(predict(fit, data = df))[, "1"]
-
-  } else if (method == "gbm") {
-    # Gradient Boosted Trees (stochastic)
-    df  <- data.frame(D = D, X)
-    fit <- gbm(D ~ ., data = df, distribution = "bernoulli",
-               n.trees = 500, interaction.depth = 3,
-               shrinkage = 0.05, bag.fraction = 0.5,
-               verbose = FALSE)
-    phat <- predict(fit, n.trees = 500, type = "response")
-
+  } else if (method == "lasso") {
+    D_fac <- as.factor(D)
+    fit  <- cv.glmnet(X, D_fac, family = "binomial", alpha = 1,
+                      nfolds = min(5, nrow(X)), type.measure = "deviance")
+    phat <- as.vector(predict(fit, newx = X, s = "lambda.min",
+                              type = "response"))
   } else {
-    stop("Unknown method: choose from probit, logit, lasso, rf, gbm")
+    stop("Unknown method: choose from probit, logit, lasso")
   }
-
-  # Clip to avoid extreme weights (numerical stability)
+  
+  # Clip to avoid extreme weights
   phat <- pmax(pmin(phat, 0.999), 0.001)
   return(phat)
 }
+
 
 
 # -----------------------------------------------------------------------------

@@ -1,0 +1,3 @@
+"method","Avg_Theta1_Bias","Avg_Theta1_MSE","Avg_DeltaT1_Bias","Avg_DeltaT1_MSE"
+"lasso",0.0207,0.0051,4e-04,0.0076
+"probit",-0.0086,0.0054,0.0013,0.0065
